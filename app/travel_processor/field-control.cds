@@ -9,10 +9,10 @@ using { sap.fe.cap.travel.TravelStatus } from '../../db/schema';
 
 // As we use field control based on travel status for many elements, we do the computation in a calculated element
 // right here instead of repeating the same expression in multiple annotations
-extend TravelStatus with {  
+extend TravelStatus with {
   // can't use UInt8 (which would automatically be mapped to Edm.Byte) because it's not supported on H2
   fieldControl: Int16 @odata.Type:'Edm.Byte' enum {Inapplicable = 0; ReadOnly = 1; Optional = 3; Mandatory = 7;}
-    = (code = #Accepted ? #ReadOnly : #Mandatory );
+    = (code = #Accepted or code = #Pending ? #ReadOnly : #Mandatory );
 }
 
 
@@ -34,16 +34,26 @@ annotate TravelService.Travel with @(Common : {
 
 } actions {
   rejectTravel @(
-    Core.OperationAvailable : ($self.TravelStatus.code != #Canceled),
+    Core.OperationAvailable : (
+      $self.TravelStatus.code != #Canceled and
+      $self.TravelStatus.code != #Pending
+    ),
     Common.SideEffects.TargetProperties : ['in/TravelStatus_code'],
   );
   acceptTravel @(
-    Core.OperationAvailable : ($self.TravelStatus.code != #Accepted),
+    Core.OperationAvailable : (
+      $self.TravelStatus.code != #Accepted and
+      $self.TravelStatus.code != #Pending
+    ),
     Common.SideEffects.TargetProperties : ['in/TravelStatus_code'],
   );
   deductDiscount @(
     Core.OperationAvailable : ($self.TravelStatus.code = #Open),
     Common.SideEffects.TargetProperties : ['in/TotalPrice', 'in/BookingFee'],
+  );
+  submitForApproval @(
+    Core.OperationAvailable : ($self.TravelStatus.code = #Open or $self.TravelStatus.code = #Canceled),
+    Common.SideEffects.TargetProperties : ['in/TravelStatus_code'],
   );
 }
 

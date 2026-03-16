@@ -10,9 +10,10 @@ service TravelService @(path:'/processor') {
   ])
   entity Travel as projection on my.Travel actions {
     action createTravelByTemplate() returns Travel;
-    action rejectTravel();
+    action rejectTravel( rejectionReason: String );
     action acceptTravel();
     action deductDiscount( percent: Percentage not null ) returns Travel;
+    action submitForApproval() returns Travel;
   };
 
 }

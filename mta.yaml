@@ -24,6 +24,10 @@ modules:
     requires:
       - name: sflight-db
       - name: sflight-uaa
+      - name: sflight-destination-service
+    properties:
+      SBPA_API_DESTINATION: sbpa-api
+      SBPA_PROCESS_DEFINITION_ID: us10.5f1bdb2btrial.sflighttravelapproval.travelApprovalProcess
     provides:
       - name: srv-api # required by consumers of CAP services (e.g. approuter, destinations)
         properties:

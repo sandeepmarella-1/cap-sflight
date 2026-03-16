@@ -19,6 +19,7 @@ entity Travel : managed {
   CurrencyCode   : Currency default 'EUR';
   Description    : String(1024);
   TravelStatus   : Association to TravelStatus default 'O' @readonly;
+  RejectionReason: String(1024);
   to_Agency      : Association to TravelAgency @mandatory;
   to_Customer    : Association to Passenger @mandatory;
   to_Booking     : Composition of many Booking on to_Booking.to_Travel = $self;
@@ -75,6 +76,7 @@ entity BookingStatus : CodeList {
 
 type TravelStatusCode : String(1) enum {
   Open     = 'O';
+  Pending  = 'P';
   Accepted = 'A';
   Canceled = 'X';
 };

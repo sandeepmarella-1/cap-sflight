@@ -7,9 +7,10 @@ using TravelService from '../../srv/travel-service';
 annotate TravelService.Travel with @UI : {
 
   Identification : [
-    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.acceptTravel',   Label  : '{i18n>AcceptTravel}'   },
-    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.rejectTravel',   Label  : '{i18n>RejectTravel}'   },
-    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.deductDiscount', Label  : '{i18n>DeductDiscount}' }
+    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.submitForApproval', Label  : '{i18n>SubmitForApproval}' },
+    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.acceptTravel',      Label  : '{i18n>AcceptTravel}'      },
+    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.rejectTravel',      Label  : '{i18n>RejectTravel}'      },
+    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.deductDiscount',    Label  : '{i18n>DeductDiscount}'    }
   ],
   HeaderInfo : {
     TypeName       : '{i18n>Travel}',
@@ -38,9 +39,10 @@ annotate TravelService.Travel with @UI : {
     TravelStatus_code
   ],
   LineItem : [
-    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.acceptTravel',   Label  : '{i18n>AcceptTravel}'   },
-    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.rejectTravel',   Label  : '{i18n>RejectTravel}'   },
-    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.deductDiscount', Label  : '{i18n>DeductDiscount}' },
+    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.submitForApproval', Label  : '{i18n>SubmitForApproval}' },
+    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.acceptTravel',      Label  : '{i18n>AcceptTravel}'      },
+    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.rejectTravel',      Label  : '{i18n>RejectTravel}'      },
+    { $Type  : 'UI.DataFieldForAction', Action : 'TravelService.deductDiscount',    Label  : '{i18n>DeductDiscount}'    },
     {
       Value : TravelID,
       @UI.Importance : #High
@@ -60,7 +62,7 @@ annotate TravelService.Travel with @UI : {
     { Value : TotalPrice, @HTML5.CssDefaults: {width:'12em'} },
     {
       Value : (TravelStatus.code),
-      Criticality : (TravelStatus.code = #Open ? 2 : (TravelStatus.code = #Accepted ? 3 : 0)),
+      Criticality : (TravelStatus.code = #Open ? 2 : (TravelStatus.code = #Pending ? 5 : (TravelStatus.code = #Accepted ? 3 : 1))),
       @UI.Importance : #High,
       @HTML5.CssDefaults: {width:'10em'}
     }
@@ -104,9 +106,10 @@ annotate TravelService.Travel with @UI : {
     {
       $Type       : 'UI.DataField',
       Value       : (TravelStatus.code),
-      Criticality : (TravelStatus.code = #Open ? 2 : (TravelStatus.code = #Accepted ? 3 : 0)),
-      Label : '{i18n>Status}' // label only necessary if differs from title of element
-    }
+      Criticality : (TravelStatus.code = #Open ? 2 : (TravelStatus.code = #Pending ? 5 : (TravelStatus.code = #Accepted ? 3 : 1))),
+      Label : '{i18n>Status}'
+    },
+    { $Type : 'UI.DataField', Value : RejectionReason, Label : '{i18n>RejectionReason}' }
   ]},
   FieldGroup #DateData : {Data : [
     { $Type : 'UI.DataField', Value : BeginDate },

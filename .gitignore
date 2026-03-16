@@ -57,3 +57,5 @@ xxx_*
 xxx/*
 
 @cds-models
+# auto generated wildcard
+db/.env

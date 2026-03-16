@@ -2,6 +2,23 @@ import cds from '@sap/cds'
 import { Booking, BookingSupplement as Supplements, Travel } from '#cds-models/TravelService'
 import { TravelStatusCode } from '#cds-models/sap/fe/cap/travel'
 import { CdsDate } from '#cds-models/_'
+import { executeHttpRequest } from '@sap-cloud-sdk/http-client'
+import { getDestination, HttpDestination } from '@sap-cloud-sdk/connectivity'
+
+cds.on('bootstrap', (app: any) => {
+  app.use((req: any, _res: any, next: any) => {
+    if (req.path?.includes('rejectTravel') || req.path?.includes('acceptTravel')) {
+      const auth = req.headers?.authorization || ''
+      if (auth.startsWith('Bearer ')) {
+        try {
+          const p = JSON.parse(Buffer.from(auth.split('.')[1], 'base64url').toString())
+          console.log('[SBPA-TOKEN]', JSON.stringify({ scope: p.scope, client_id: p.client_id, sub: p.sub, aud: p.aud }))
+        } catch(e) { console.log('[SBPA-TOKEN] decode failed') }
+      }
+    }
+    next()
+  })
+})
 
 export class TravelService extends cds.ApplicationService { init() {
 
@@ -82,7 +99,7 @@ export class TravelService extends cds.ApplicationService { init() {
   // Action Implementations...
   //
 
-  const { acceptTravel, rejectTravel, deductDiscount } = Travel.actions;
+  const { acceptTravel, rejectTravel, deductDiscount, submitForApproval } = Travel.actions;
   this.before([acceptTravel, rejectTravel], [Travel, Travel.drafts], async (req) => {
     const existingDraft = await SELECT.one(Travel.drafts.name).where(req.params[0])
       .columns(travel => { travel.DraftAdministrativeData.InProcessByUser.as('InProcessByUser') } )
@@ -93,7 +110,80 @@ export class TravelService extends cds.ApplicationService { init() {
       throw req.reject(423, `The travel is locked by ${existingDraft.InProcessByUser}.`);
   })
   this.on (acceptTravel, req => UPDATE (req.subject) .with ({ TravelStatus_code: TravelStatusCode.Accepted }))
-  this.on (rejectTravel, req => UPDATE (req.subject) .with ({ TravelStatus_code: TravelStatusCode.Canceled }))
+  this.on (rejectTravel, async req => {
+    const { rejectionReason } = req.data
+    await UPDATE (req.subject) .with ({
+      TravelStatus_code: TravelStatusCode.Canceled,
+      RejectionReason: rejectionReason ?? null
+    })
+  })
+  this.on (submitForApproval, async req => {
+    // 1. Load travel with related data
+    const { TravelUUID } = req.params[0] as { TravelUUID: string }
+    const travel = await SELECT.one (Travel)
+      .where ({ TravelUUID })
+      .columns (t => {
+        t.TravelUUID, t.TravelID, t.Description,
+        t.BeginDate, t.EndDate,
+        t.BookingFee, t.TotalPrice, t.CurrencyCode_code.as('CurrencyCode'),
+        t.GoGreen, t.TravelStatus_code,
+        t.to_Customer(c => { c.FirstName, c.LastName }),
+        t.to_Agency(a => { a.Name })
+      })
+    if (!travel) throw req.reject(400, 'Please save the travel before submitting for approval.')
+    if (travel.TravelStatus_code !== TravelStatusCode.Open && travel.TravelStatus_code !== TravelStatusCode.Canceled)
+      throw req.reject(400, `Travel cannot be submitted. Current status: ${travel.TravelStatus_code}`)
+
+    // 2. Check for draft lock
+    const existingDraft = await SELECT.one(Travel.drafts.name).where({ TravelUUID })
+      .columns(t => { t.DraftAdministrativeData.InProcessByUser.as('InProcessByUser') })
+    if (existingDraft)
+      throw req.reject(423, `The travel is locked by ${existingDraft.InProcessByUser}.`)
+
+    // 3. Call SBPA API to start workflow
+    const sbpaDestination = process.env.SBPA_API_DESTINATION || 'sbpa-api'
+    const definitionId = process.env.SBPA_PROCESS_DEFINITION_ID || 'us10.5f1bdb2btrial.sflighttravelapproval.travelApprovalProcess'
+    const customerName = `${travel.to_Customer?.FirstName ?? ''} ${travel.to_Customer?.LastName ?? ''}`.trim()
+
+    try {
+      const dest = await getDestination({ destinationName: sbpaDestination }) as HttpDestination
+      if (!dest) throw new Error(`Destination '${sbpaDestination}' not found.`)
+      dest.forwardAuthToken = false  // force OAuth2ClientCredentials, ignore forwardAuthToken flag
+      await executeHttpRequest(
+        dest,
+        {
+          method: 'POST',
+          url: '/workflow/rest/v1/workflow-instances',
+          data: {
+            definitionId,
+            context: {
+              travelUUID:     travel.TravelUUID,
+              travelID:       travel.TravelID,
+              description:    travel.Description ?? '',
+              customerName,
+              agencyName:     travel.to_Agency?.Name ?? '',
+              beginDate:      travel.BeginDate,
+              endDate:        travel.EndDate,
+              totalPrice:     parseFloat(travel.TotalPrice as any),
+              currencyCode:   travel.CurrencyCode,
+              bookingFee:     parseFloat(travel.BookingFee as any),
+              goGreen:        travel.GoGreen ?? false,
+              processorEmail: req.user.id
+            }
+          }
+        },
+        { fetchCsrfToken: false }
+      )
+    } catch (err: any) {
+      const detail = err.response?.data ? JSON.stringify(err.response.data) : ''
+      console.error('SBPA error response:', detail)
+      throw req.reject(500, `Failed to start approval workflow: ${err.message} ${detail}`)
+    }
+
+    // 4. Update status to Pending
+    await UPDATE (req.subject) .with ({ TravelStatus_code: TravelStatusCode.Pending })
+    return SELECT (req.subject)
+  })
   this.on (deductDiscount, async req => {
     let discount = req.data.percent / 100
     let succeeded = await UPDATE (req.subject) .where `TravelStatus.code != 'A'` .and `BookingFee != null`

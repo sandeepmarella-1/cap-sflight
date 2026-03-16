@@ -13,6 +13,7 @@
       "description": "admin"
     }
   ],
+  "authorities": ["$XSAPPNAME.reviewer"],
   "attributes": [],
   "role-templates": [
     {
