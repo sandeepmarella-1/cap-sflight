@@ -34,7 +34,7 @@
     "karma-ui5": "^4.0.1",
     "karma-ui5-transpile": "^3.5.1",
     "puppeteer": "^24",
-    "typescript": "^5.1.6",
+    "typescript": "^6.0.3",
     "ui5-middleware-simpleproxy": "^3.2.16",
     "ui5-task-zipper": "^3.1.4",
     "ui5-tooling-transpile": "^3.3.7"
